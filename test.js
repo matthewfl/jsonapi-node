@@ -6,6 +6,7 @@ balanced = new jsonapi('http://localhost:5000', {
     'headers': {'Accept-Type': 'application/vnd.balancedpayments+json; version=1.1' }
 });
 
+
 balanced.list('/marketplaces', function (err, obj) {
     console.log(arguments);
     obj[0].list('customers', function (err, cust) {
@@ -16,9 +17,17 @@ balanced.list('/marketplaces', function (err, obj) {
     debugger;
 });
 
+
 /*
 balanced.get('/marketplaces', function(err, obj) {
     console.log(obj.raw_obj)
     debugger;
 })
+*/
+
+/*
+balanced.create('/api_keys', function (err, obj) {
+    console.log(arguments);
+    debugger;
+});
 */
