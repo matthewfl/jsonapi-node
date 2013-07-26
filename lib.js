@@ -1,5 +1,7 @@
 var request = require("request");
 
+var version = '0.0.1a';
+
 // helper functions
 
 function update_obj(obj, with_what) {
@@ -15,22 +17,39 @@ function combine_obj() {
     return ret;
 }
 
+function get_member(obj, name) {
+    if(typeof name == 'string')
+	name = name.split('.');
+    if(name.length == 0)
+	return obj;
+    if(!obj[name[0]]) return null;
+    return get_member(obj[name.shift()], name);
+}
+
+function handle_bars(obj, elem){
+    if(typeof elem == 'string') {
+	return elem.replace(/\{([\.\w]+)\}/g, function(match, what) {
+	    return get_member(obj, what);
+	});
+    }
+    if(typeof elem == 'object') {
+	elem = combine_obj(elem);
+	for(var n in elem) {
+	    elem[n] = handle_bars(obj, elem[n]);
+	}
+    }
+}
+
+
 // base functions
 
 function jsonapi(base_url, args) {
     this.base_url = base_url + '/';
-    this.request_args = args || {}
+    this.request_args = args || { 'headers': {'User-Agent': ''} };
     this.routes = {};
     this.cache = {};
-}
-
-function obj (api, type, obj) {
-    this._api = api;
-    this._raw_obj = obj;
-    this.type = type;
-    this.links = {};
-    for(var n in obj)
-	this[n] = obj[n]; // TODO: make this copy stuff?
+    this.objects = {};
+    this.request_args.headers['User-Agent'] += ' jsonapi/'+version+' node/'+process.version;
 }
 
 
@@ -66,10 +85,10 @@ jsonapi.prototype.get = function(path, callback, _list) {
     var self = this;
     // TODO check the cache
     /*
-    if(_list !== true) {
-	if(self.cache[path])
-	    return callback(null, self.cache[path])
-    }
+      if(_list !== true) {
+      if(self.cache[path])
+      return callback(null, self.cache[path])
+      }
     */
     self._req(path, 'GET', function(err, json) {
 	if(err) return callback(err, null);
@@ -93,7 +112,8 @@ jsonapi.prototype._processResult = function (json) {
 		self.cache[o.href]._update(o);
 		list.push(self.cache[o.href]);
 	    } else {
-		o = new obj(self, name, o);
+		var type = name.replace(/s$/, '');
+		o = this._new_obj(type, o);
 		if(o.href)
 		    self.cache[o.href] = o;
 		list.push(o);
@@ -103,7 +123,7 @@ jsonapi.prototype._processResult = function (json) {
     return list;
 };
 
-obj.prototype.list = jsonapi.prototype.list = function(path, callback) {
+jsonapi.prototype.list = function(path, callback) {
     return this.get(path, callback, true);
 };
 
@@ -113,13 +133,27 @@ jsonapi.prototype.processLinks = function (links) {
 	var dat = /(\w+)\.(\w+)/.exec(link);
 	if(!dat) continue;
 	this.routes[dat[1]] = this.routes[dat[1]] || {};
-	this.routes[dat[1]][dat[2]] = links[link];
+	var route;
+	if(typeof links[link] == 'string') {
+	    route = this.routes[dat[1]][dat[2]] = {'method': 'GET', 'href': links[link] };
+	}else if(typeof links[link] == 'object') {
+	    route = this.routes[dat[1]][dat[2]] = links[link];
+	    route.fields = route.fields || {};
+	    for(var n in route.fields) {
+		if(!Array.isArray(route.fields[n]))
+		    route.fields[n] = [route.fields[n]];
+	    }
+	}
+	if(route.fields) {
+	    this._new_obj(dat[1].replace(/s$/, ''), {})._add_action(dat[2]);
+	}
     }
 };
 
 jsonapi.prototype.getLink = function (obj, link) {
     //if(!obj.type || !this.routes[obj.type] && !this.routes[obj.type][link]) return null;
-    return this.routes[obj.type+'s'][link].replace(/\{([\.\w]+)\}/g, function (match, what) {
+    console.log(this, arguments);
+    return this.routes[obj.type+'s'][link].href.replace(/\{([\.\w]+)\}/g, function (match, what) {
 	var dat = /(\w+)\.(\w+)/.exec(what);
 	return obj[dat[2]];
     });
@@ -138,77 +172,140 @@ jsonapi.prototype.create = function(url, data, callback) {
     });
 };
 
+jsonapi.prototype._new_obj = function(type, dat) {
+    if(this.objects[type])
+	return new this.objects[type](dat);
+    else {
+	var a = this.objects[type] = make_obj(this, type);
+	return new a(dat);
+    }
+};
 
+function make_obj(api, type) {
 
-obj.prototype.save = function (callback) {
-    var self = this;
-    callback = callback || function (err) { if(err) throw err; };
-    this._api._req(this.href, { 'json': this.toJSON(), 'method': 'PUT' }, function (err, json) {
-	if(err) return callback(err, null);
-	var list = self._api._processResult(json);
-	callback(null, list[0]);
+    function obj (obj) {
+	this._api = api; // TODO: remove this
+	this.type = type;
+	this._raw_obj = obj;
+	this.links = {};
+	for(var n in obj)
+	    this[n] = obj[n]; // TODO: make this copy stuff?
+    }
+
+    //obj.prototype.type = function () { return type; };
+    /*
+      Object.defineProperties(obj, {
+	type: { get: function () { return type; } }
     });
-};
+    */
 
-obj.prototype.get = function (what, callback, _list) {
-    if(this[what]) {
-	return callback(null, this[what]);
-    }
-    if(this.links[what]) {
-	return this._api.get(this.links[what], callback);
-    }
-    var link = this._api.getLink(this, what);
-    if(!link) return callback(new Error('could not compute link '+what+' for '+obj.type), null);
-    this._api.get(link, callback, _list);
-};
+    obj.prototype.save = function (callback) {
+	var self = this;
+	callback = callback || function (err) { if(err) throw err; };
+	this._api._req(this.href, { 'json': this.toJSON(), 'method': 'PUT' }, function (err, json) {
+	    if(err) return callback(err, null);
+	    var list = self._api._processResult(json);
+	    callback(null, list[0]);
+	});
+    };
 
-obj.prototype.create = function (what, data, callback) {
-    var self = this;
-    var link;
-    if(typeof data == 'function') {
-	callback = data;
-	data = {};
-    }
-    if(this.links[what]) {
-	link = this.links[what];
-    }else{
-	link = this._api.getLink(this, what);
-    }
-    if(!link) return callback(new Error('could not find link for '+what+' from '+this.type), null);
-    this._api._req(link, { 'json': data, 'method': 'POST' }, function (err, json) {
-	if(err) return callback(err, null);
-	var list = self._api._processResult(json);
-	callback(null, list[0]);
-    });
-};
+    obj.prototype.get = function (what, callback, _list) {
+	if(this[what]) {
+	    return callback(null, this[what]);
+	}
+	if(this.links[what]) {
+	    return this._api.get(this.links[what], callback);
+	}
+	var link = this._api.getLink(this, what);
+	if(!link) return callback(new Error('could not compute link '+what+' for '+obj.type), null);
+	this._api.get(link, callback, _list);
+    };
 
-obj.prototype.delete = function (callback) {
-    var self = this, href = this.href;
-    this._api._rev(href, { 'method': 'DELETE' }, function (err, json){
-	if(err) return callback(err);
-	delete self._api.cache[href];
-	callback(null);
-    });
-};
+    obj.prototype.create = function (what, data, callback) {
+	var self = this;
+	var link;
+	what += 's';
+	if(typeof data == 'function') {
+	    callback = data;
+	    data = {};
+	}
+	if(this.links[what]) {
+	    link = this.links[what];
+	}else{
+	    link = this._api.getLink(this, what);
+	}
+	if(!link) return callback(new Error('could not find link for '+what+' from '+this.type), null);
+	this._api._req(link, { 'json': data, 'method': 'POST' }, function (err, json) {
+	    if(err) return callback(err, null);
+	    var list = self._api._processResult(json);
+	    callback(null, list[0]);
+	});
+    };
 
-obj.prototype._update = function (dat) {
-    // clear the object
-    for(var n in this)
-	if(this.hasOwnProperty(n) && n != '_api' && n != 'type')
-	    delete this[n];
+    obj.prototype.delete = function (callback) {
+	var self = this, href = this.href;
+	this._api._rev(href, { 'method': 'DELETE' }, function (err, json){
+	    if(err) return callback(err);
+	    delete self._api.cache[href];
+	    callback(null);
+	});
+    };
 
-    // same as init in copying over object
-    this.links = {};
-    this._raw_obj = dat;
-    for(var n in dat)
-	this[n] = dat[n];
-};
+    obj.prototype.do = function (what, args, callback) {
+	var self = this;
+	var act = this._api.routes[this.type+'s'][what];
+	var collect = {};
+	collect[this.type+'s'] = this;
+	for(var n in act.fields) {
+	    var itm = act.fields[n];
+	    for(var a=0; a < itm.length; a++) {
+		if(typeof args[n] == itm.type || args[n].type == itm.type) {
+		    args[itm.name || n] = itm.value ? handle_bars(args[n], itm.value) : args[n];
+		    break;
+		}
+	    }
+	}
+	//var url = this._api.getLink(this, act.href)
+	var url = handle_bars(collect, act.href);
+	this._api._req(url, { 'json': args, method: act.method }, function (err, json){
+	    if(err) callback(err, null);
+	    var list = self._api._processResult(json);
+	    callback(null, list[0] || null);
+	});
+    };
 
-obj.prototype.toJSON = function () {
-    var obj = {};
-    for(var n in this) {
-	if(n[0] == '_' || n == 'type' || n == 'links') continue;
-	obj[n] = this[n];
-    }
+    obj.prototype._update = function (dat) {
+	// clear the object
+	for(var n in this)
+	    if(this.hasOwnProperty(n) && n != '_api' && n != 'type')
+		delete this[n];
+
+	// same as init in copying over object
+	this.links = {};
+	this._raw_obj = dat;
+	for(var n in dat)
+	    this[n] = dat[n];
+    };
+
+    obj.prototype.toJSON = function () {
+	var obj = {};
+	for(var n in this) {
+	    if(n[0] == '_' || n == 'type' || n == 'links') continue;
+	    if(typeof this[n] == 'function') continue;
+	    obj[n] = this[n];
+	}
+	return obj;
+    };
+
+    obj.prototype._add_action = function (act) {
+	if(!obj.prototype[act])
+	    obj.prototype[act] = function (args, callback) {
+		return this.do(act, args, callback);
+	    };
+    };
+
+    obj.prototype.list = jsonapi.prototype.list;
+
     return obj;
-};
+
+}

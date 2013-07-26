@@ -3,7 +3,10 @@ var jsonapi = require('./lib');
 var test = require('./simple_tests')
 
 balanced = new jsonapi('http://localhost:5000', {
-    'headers': {'Accept-Type': 'application/vnd.balancedpayments+json; version=1.1' }
+    'headers': {
+	'Accept-Type': 'application/vnd.balancedpayments+json; version=1.1',
+	'X-Links': 'true'
+    }
 });
 
 
@@ -26,7 +29,7 @@ test('marketplace', function (api_key) {
 
 test('customer_create', function(marketplace) {
     var cb = this;
-    marketplace.create('customers', function(err, obj) {
+    marketplace.create('customer', function(err, obj) {
 	if(err) throw err;
 	cb(obj);
     });
@@ -34,7 +37,7 @@ test('customer_create', function(marketplace) {
 
 test('card_create', function (marketplace){
     var cb = this;
-    marketplace.create('cards',
+    marketplace.create('card',
 		       {
 			   'number': '4111111111111111',
 			   'year': '2016',
@@ -50,9 +53,16 @@ test('card_create', function (marketplace){
 test('add_card_to_customer', function(customer_create, card_create) {
     var cb = this;
     customer_create.card_uri = card_create.href;
-    debugger;
     customer_create.save(function(err, obj) {
-	debugger;
+	if(err) throw err;
+	cb(obj);
+    });
+});
+
+test('debit_customer', function (add_card_to_customer){
+    var cb = this;
+    debugger;
+    add_card_to_customer.debit({amount: 500}, function (err, obj){
 	if(err) throw err;
 	cb(obj);
     });
