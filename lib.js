@@ -4,6 +4,8 @@ var version = '0.0.1a';
 
 // helper functions
 
+var log = console.log; //function () {};
+
 function update_obj(obj, with_what) {
     for(var k in with_what)
 	obj[k] = with_what[k];
@@ -66,18 +68,26 @@ jsonapi.prototype._req = function (path, method, callback) {
 	'uri': this.base_url + path
     }, method);
     params.uri = params.uri.replace(/([^:])\/+/g, '$1/');
-    console.log('Making request: ', JSON.stringify(params, null, 4));
+    log('Making request: ', JSON.stringify(params, null, 4));
     request(params, function(err, req, body) {
 	if(err) {
+	    console.error(err);
+	    debugger;
 	    return callback(err, null);
 	}
 	if(req.statusCode >= 400) {
 	    return callback(new Error('http error code: \n' + typeof body == 'string' ? body : JSON.stringify(body, null, 4)), null);
 	}
-	console.log('result: ', body);
-	var json = typeof body == 'string' ? JSON.parse(req.body) : body;
-	self.processLinks(json.links);
-	callback(null, json);
+	log('result: ', body);
+	try {
+	    var json = typeof body == 'string' ? JSON.parse(req.body) : body;
+	    self.processLinks(json.links);
+	    callback(null, json);
+	} catch(e) {
+	    console.error(e);
+	    debugger;
+	    throw e;
+	}
     });
 };
 
@@ -152,7 +162,7 @@ jsonapi.prototype.processLinks = function (links) {
 
 jsonapi.prototype.getLink = function (obj, link) {
     //if(!obj._type || !this.routes[obj._type] && !this.routes[obj._type][link]) return null;
-    console.log(this, arguments);
+    log(this, arguments);
     return this.routes[obj._type+'s'][link].href.replace(/\{([\.\w]+)\}/g, function (match, what) {
 	var dat = /(\w+)\.(\w+)/.exec(what);
 	return obj[dat[2]];
