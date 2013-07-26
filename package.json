@@ -1,8 +1,17 @@
 {
-  "name": "jsonapi-client",
-  "version": "0.0.1",
-  "dependencies": {
-    "request": "~2.25.0"
-  },
-  "private": true
+    "name": "jsonapi-client",
+    "version": "0.0.1",
+    "main": "lib.js",
+    "dependencies": {
+	"request": "~2.25.0"
+    },
+    "author": {
+	"name": "Matthew FL",
+	"email": "matthew@matthewfl.com",
+	"url": "http://matthewfl.com"
+    },
+    "repository" :{
+	"type" : "git",
+	"url" : "https://github.com/matthewfl/jsonapi-node.git"
+    }
 }
