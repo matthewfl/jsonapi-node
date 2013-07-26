@@ -52,10 +52,15 @@ test('card_create', function (marketplace){
 
 test('add_card_to_customer', function(customer_create, card_create) {
     var cb = this;
-    customer_create.card_uri = card_create.href;
+    /*customer_create.card_uri = card_create.href;
     customer_create.save(function(err, obj) {
 	if(err) throw err;
 	cb(obj);
+    });*/
+    debugger;
+    customer_create.add_card({card: card_create}, function(err, obj) {
+	if(err) throw err;
+	cb(customer_create);
     });
 });
 

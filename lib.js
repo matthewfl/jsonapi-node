@@ -151,9 +151,9 @@ jsonapi.prototype.processLinks = function (links) {
 };
 
 jsonapi.prototype.getLink = function (obj, link) {
-    //if(!obj.type || !this.routes[obj.type] && !this.routes[obj.type][link]) return null;
+    //if(!obj._type || !this.routes[obj._type] && !this.routes[obj._type][link]) return null;
     console.log(this, arguments);
-    return this.routes[obj.type+'s'][link].href.replace(/\{([\.\w]+)\}/g, function (match, what) {
+    return this.routes[obj._type+'s'][link].href.replace(/\{([\.\w]+)\}/g, function (match, what) {
 	var dat = /(\w+)\.(\w+)/.exec(what);
 	return obj[dat[2]];
     });
@@ -185,14 +185,14 @@ function make_obj(api, type) {
 
     function obj (obj) {
 	this._api = api; // TODO: remove this
-	this.type = type;
+	this._type = type;
 	this._raw_obj = obj;
 	this.links = {};
 	for(var n in obj)
 	    this[n] = obj[n]; // TODO: make this copy stuff?
     }
 
-    //obj.prototype.type = function () { return type; };
+    //obj.prototype._type = function () { return type; };
     /*
       Object.defineProperties(obj, {
 	type: { get: function () { return type; } }
@@ -217,7 +217,7 @@ function make_obj(api, type) {
 	    return this._api.get(this.links[what], callback);
 	}
 	var link = this._api.getLink(this, what);
-	if(!link) return callback(new Error('could not compute link '+what+' for '+obj.type), null);
+	if(!link) return callback(new Error('could not compute link '+what+' for '+obj._type), null);
 	this._api.get(link, callback, _list);
     };
 
@@ -234,7 +234,7 @@ function make_obj(api, type) {
 	}else{
 	    link = this._api.getLink(this, what);
 	}
-	if(!link) return callback(new Error('could not find link for '+what+' from '+this.type), null);
+	if(!link) return callback(new Error('could not find link for '+what+' from '+this._type), null);
 	this._api._req(link, { 'json': data, 'method': 'POST' }, function (err, json) {
 	    if(err) return callback(err, null);
 	    var list = self._api._processResult(json);
@@ -253,14 +253,15 @@ function make_obj(api, type) {
 
     obj.prototype.do = function (what, args, callback) {
 	var self = this;
-	var act = this._api.routes[this.type+'s'][what];
+	var act = this._api.routes[this._type+'s'][what];
 	var collect = {};
-	collect[this.type+'s'] = this;
+	collect[this._type+'s'] = this;
 	for(var n in act.fields) {
 	    var itm = act.fields[n];
 	    for(var a=0; a < itm.length; a++) {
-		if(typeof args[n] == itm.type || args[n].type == itm.type) {
-		    args[itm.name || n] = itm.value ? handle_bars(args[n], itm.value) : args[n];
+		if(typeof args[n] == itm[a]._type || args[n]._type == itm[a].type) {
+		    args[itm[a].name || n] = itm[a].value ? handle_bars(args[n], itm[a].value) : args[n];
+		    if(itm[a].name && itm[a].name != n) delete args[n];
 		    break;
 		}
 	    }
@@ -277,7 +278,7 @@ function make_obj(api, type) {
     obj.prototype._update = function (dat) {
 	// clear the object
 	for(var n in this)
-	    if(this.hasOwnProperty(n) && n != '_api' && n != 'type')
+	    if(this.hasOwnProperty(n) && n != '_api' && n != '_type')
 		delete this[n];
 
 	// same as init in copying over object
