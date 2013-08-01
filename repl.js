@@ -5,19 +5,18 @@ var r = repl.start("balanced> ");
 
 balanced = new jsonapi('http://localhost:5000', {
 			       'headers': {
-				   'Accept-Type': 'application/vnd.balancedpayments+json; version=1.1',
-				   'X-Links': 'true'
+				   'Accept': 'application/vnd.balancedpayments+json; version=1.1, application/vnd.api+json'
 			       }
 });
 
 r.context.balanced = balanced;
 
 function dump(err, value) {
-    console.log('dump recieved');
-    dump.last = dump[dump.length++] = value;
+    console.log('dump '+dump.len+' recieved');
+    dump.last = dump[dump.len++] = value;
 }
 
-dump.length = 0;
+dump.len = 0;
 
 r.context.dump = dump;
 

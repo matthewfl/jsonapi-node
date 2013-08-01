@@ -4,10 +4,26 @@ var test = require('./simple_tests')
 
 balanced = new jsonapi('http://localhost:5000', {
     'headers': {
-	'Accept-Type': 'application/vnd.balancedpayments+json; version=1.1',
-	'X-Links': 'true'
+	'Accept': 'application/vnd.balancedpayments+json; version=1.1, application/vnd.api+json'
     }
 });
+
+function back(debug, cb) {
+    return function (err, obj) {
+	if(debug === true) {
+	    debugger;
+	    if(err)
+		console.error(err);
+	    else
+		cb(obj);
+	}else{
+	    if(err)
+		console.error(err);
+	    else
+		debug(obj); // debug is type object
+	}
+    }
+}
 
 
 test('api_key', function () {
@@ -67,6 +83,7 @@ test('bank_account_create', function (marketplace) {
 test('update_customer', function (customer_create) {
     var cb = this;
     customer_create.name = "testing name";
+    debugger;
     customer_create.save(function(err, obj) {
 	cb.assert(obj.name == "testing name");
 	cb();
@@ -76,7 +93,8 @@ test('update_customer', function (customer_create) {
 test('add_card_to_customer', function(customer_create, card_create) {
     var cb = this;
     customer_create.add_card({card: card_create}, function(err, obj) {
-	debugger;
+	// debugger;
+	// the obj is the card that was added
 	if(err) console.error(err)
 	else cb(customer_create);
     });
@@ -95,8 +113,22 @@ test('add_bank_account_to_customer', function(bank_account_create, customer_crea
 test('debit_customer', function (add_card_to_customer){
     var cb = this;
     add_card_to_customer.debit({amount: 500}, function (err, obj){
-	debugger;
-	if(err) console.error(err);
-	else cb(obj);
+	//debugger;
+	if(err)
+	    console.error(err);
+	else
+	    cb(obj);
     });
+});
+
+
+test('hold_customer', function (add_card_to_customer) {
+    var cb = this;
+    add_card_to_customer.hold({amount: 400}, back(cb));
+});
+
+test('capture_hold', function(hold_customer) {
+    var cb = this;
+    debugger;
+    hold_customer.debit({}, back(true, cb));
 });

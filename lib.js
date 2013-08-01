@@ -51,7 +51,7 @@ function jsonapi(base_url, args) {
     this.routes = {};
     this.cache = {};
     this.objects = {};
-    this.request_args.headers['User-Agent'] += ' jsonapi/'+version+' node/'+process.version;
+    this.request_args.headers['User-Agent'] += ' node-jsonapi/'+version+' node/'+process.version;
 }
 
 
@@ -220,11 +220,14 @@ function make_obj(api, type) {
     };
 
     obj.prototype.get = function (what, callback, _list) {
-	if(this[what]) {
+	if(typeof this[what] != 'undefined') {
 	    return callback(null, this[what]);
 	}
-	if(this.links[what]) {
-	    return this._api.get(this.links[what], callback);
+	if(typeof this.links[what] != 'undefined') {
+	    if(this.links[what])
+		return this._api.get(this.links[what], callback);
+	    else
+		return callback(new Error(this._type + ' ' + this.href + ' does not have a '+what+' associated'));
 	}
 	var link = this._api.getLink(this, what);
 	if(!link) return callback(new Error('could not compute link '+what+' for '+obj._type), null);
@@ -269,7 +272,7 @@ function make_obj(api, type) {
 	for(var n in act.fields) {
 	    var itm = act.fields[n];
 	    for(var a=0; a < itm.length; a++) {
-		if(typeof args[n] == itm[a]._type || args[n]._type == itm[a].type) {
+		if(typeof args[n] != 'undefined' && (typeof args[n] == itm[a]._type || args[n]._type == itm[a].type)) {
 		    args[itm[a].name || n] = itm[a].value ? handle_bars(args[n], itm[a].value) : args[n];
 		    if(itm[a].name && itm[a].name != n) delete args[n];
 		    break;
@@ -279,7 +282,7 @@ function make_obj(api, type) {
 	//var url = this._api.getLink(this, act.href)
 	var url = handle_bars(collect, act.href);
 	this._api._req(url, { 'json': args, method: act.method }, function (err, json){
-	    if(err) callback(err, null);
+	    if(err) return callback(err, null);
 	    var list = self._api._processResult(json);
 	    callback(null, list[0] || null);
 	});
@@ -316,6 +319,10 @@ function make_obj(api, type) {
     };
 
     obj.prototype.list = jsonapi.prototype.list;
+
+    obj.prototype.refresh = function (callback) {
+	this._api.get(this.href, callback || function () {});
+    };
 
     return obj;
 
