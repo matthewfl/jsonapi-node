@@ -79,7 +79,15 @@ function run(name) {
     self.running = true;
     console.log('Running test:', name);
     try {
-	self.fun.apply(finish, args);
+	var rets = self.fun.apply(finish, args);
+	if (rets && typeof rets.then == 'function') {
+	    rets.then(function(val) {
+		finish(val);
+	    }, function(err) {
+		finish.assert(false);
+		finish(err);
+	    });
+	}
     } catch(e) {
 	self.errors.push(e);
     }
