@@ -54,6 +54,7 @@ function jsonapi(base_url, args) {
     this.routes = {};
     this.cache = {};
     this.objects = {};
+    this.action_names = {};
     this.request_args.headers['User-Agent'] += ' node-jsonapi/'+version+' node/'+process.version;
 }
 
@@ -160,7 +161,9 @@ jsonapi.prototype.processLinks = function (links) {
         }
         if(route.fields) {
             this._new_obj(dat[1].replace(/s$/, ''), {})._add_action(dat[2]);
-        }
+        }else{
+	    this._promise_item(dat[2]);
+	}
     }
 };
 
@@ -194,11 +197,45 @@ jsonapi.prototype._reg_type = function(type, func) {
     var a = this[type] = this.objects[type] = make_obj(this, type);
     for(var f in func) {
         if(typeof func[f] == 'function') {
-            a.prototype[f] = func[f];
+            this._promise_action(f);
+	    a.prototype[f] = func[f];
         }else {
-            // todo:
+            // TODO:
+	    if(func[f] == '_') {
+		this._promise_item(f);
+	    }
         }
     }
+};
+
+// so sorry
+Q.makePromise.prototype.create = function (args) {
+    return this.invoke('create', args);
+};
+
+Q.makePromise.prototype.get = function (name) {
+    return this.then(function(val) {
+        if(typeof val.get == 'function') {
+            return val.get.call(val, name);
+        }
+        return Q(val).dispatch('get', name);
+    });
+};
+
+jsonapi.prototype._promise_action = function (name) {
+    Q.makePromise.prototype[name] = function () {
+        return Q.spread([this, Q.all(arguments)], function(self, args) {
+            return self[name].apply(self, args);
+        });
+    };
+};
+
+jsonapi.prototype._promise_item = function (name) {
+    Object.defineProperty(Q.makePromise.prototype, name, {
+	'get': function () {
+	    return this.get(name);
+	}
+    });
 };
 
 function make_obj(api, type) {
@@ -217,20 +254,13 @@ function make_obj(api, type) {
                 var val=null;
                 Object.defineProperty(self, name, {
                     'get': function () {
-                        if(val) return dummy_obj(Q(val));
+                        if(val) return Q(val);
                         var link = self._api.getLink(self, name);
                         if(!link) return Q.reject(new Error('could not find link for '+name+' from '+self._type));
-                        if(self.links[name]) {
-                            return dummy_obj(self._api.get(link, false)
-                                             .then(function (ret) {
-                                                 return val = ret;
-                                             }));
-                        }else{
-                            return dummy_obj(self._api.get(link, true)
-                                             .then(function(ret) {
-                                                 return val = ret;
-                                             }));
-                        }
+                        return self._api.get(link, !self.links[name])
+                            .then(function (ret) {
+                                return val = ret;
+                            });
                     }
                 });
             })(n);
@@ -291,7 +321,7 @@ function make_obj(api, type) {
 
     obj.prototype.delete = function () {
         var self = this, href = this.href;
-        return this._api._rev(href, { 'method': 'DELETE' }).then(function (json){
+        return this._api._req(href, { 'method': 'DELETE' }).then(function (json) {
             delete self._api.cache[href];
         });
     };
@@ -361,18 +391,6 @@ function make_obj(api, type) {
 }
 
 
-function dummy_obj(obj) {
-    obj.create = function(args) {
-        return this.then(function (a) {
-            console.log(a);
-            console.log('asdfasdfasdfasdfasdf')
-            //debugger;
-            return a;
-        }).invoke('create', args);
-    };
-    return obj;
-}
-
 // this page object is balanced specific atm
 // todo: fix that???
 
@@ -397,7 +415,7 @@ page_obj.prototype._load = function (meta, list) {
     this._meta = meta;
     this._base_url = this._meta.href.split('?')[0];
     for(var n in list) {
-        this._objs[n + this._meta.offset] = list[n];
+        this._objs[n*1 + this._meta.offset*1] = list[n];
     }
 };
 
