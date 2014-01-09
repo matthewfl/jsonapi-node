@@ -47,73 +47,63 @@ test('customer_create', function(marketplace) {
     //debugger;
     //return marketplace.customers.create()
     //return marketplace.create('customer');
-    gg = marketplace.customers.create;
-    debugger;
     return marketplace.customers.create();
 });
 
-// test('card_create', function (marketplace){
-//     return marketplace.create('card', {
-// 	'number': '4111111111111111',
-// 	'expiration_year': '2016',
-// 	'expiration_month': '12'
-//     });
-// });
+test('card_create', function (marketplace){
+    return marketplace.cards.create({
+	'number': '4111111111111111',
+	'expiration_year': '2016',
+	'expiration_month': '12'
+    });
+});
 
 
-// test('bank_account_create', function (marketplace) {
-//     return marketplace.create('bank_account', {
-// 	'routing_number': '021000021',
-// 	'account_number': '9900000002',
-// 	'name': 'what up',
-// 	'type': 'checking'
-//     });
-// });
+test('bank_account_create', function (marketplace) {
+    return marketplace.bank_accounts.create({
+	'routing_number': '021000021',
+	'account_number': '9900000002',
+	'name': 'what up',
+	'type': 'checking'
+    });
+});
 
 
-// test('update_customer', function (customer_create) {
-//     var cb = this;
-//     customer_create.name = "testing name";
-//     return customer_create.save();
-// });
+test('update_customer', function (customer_create) {
+    var cb = this; customer_create.name = "testing name";
+    return customer_create.save().then(function (c) {
+	cb.assert(c.name == 'testing name');
+    });
+});
 
-// test('add_card_to_customer', function(customer_create, card_create) {
-//     var cb = this;
-//     card_create.customer = customer_create.id;
-//     return card_create.save().then(function () {
-// 	card_create.get('customer').then(function(customer) {
-// 	    cb.assert(customer == customer_create);
-// 	});
-// 	return card_create;
-//     });
-//     //return customer_create.add_card({card: card_create}).then(function () { return customer_create; })
-
-// // , function(err, obj) {
-// // 	// debugger;
-// // 	// the obj is the card that was added
-// // 	if(err) console.error(err)
-// // 	else cb(customer_create);
-// //     });
-// });
+test('add_card_to_customer', function(customer_create, card_create) {
+    var cb = this;
+    return customer_create.add_card(card_create).then(function () {
+	cb.assert(card_create.links.customer == customer_create.id);
+	return card_create;
+    });
+});
 
 
-// test('add_bank_account_to_customer', function(bank_account_create, customer_create) {
-//     return customer_create.add_bank_account({bank_account: bank_account_create});
-// });
+test('add_bank_account_to_customer', function(bank_account_create, customer_create) {
+    var cb = this;
+    return customer_create.add_bank_account(bank_account_create)
+    .then(function () {
+	cb.assert(bank_account_create.links.customer == customer_create.id);
+    });
+});
 
-// test('debit_customer', function (add_card_to_customer){
-//     var cb = this;
-//     return add_card_to_customer.debit({amount: 500});
-// });
+test('debit_card', function (add_card_to_customer){
+    var cb = this;
+    return add_card_to_customer.debit({amount: 500});
+});
 
 
-// test('hold_customer', function (add_card_to_customer) {
-//     var cb = this;
-//     return add_card_to_customer.hold({amount: 400})
-// });
+test('hold_card', function (add_card_to_customer) {
+    var cb = this;
+    return add_card_to_customer.hold({amount: 400});
+});
 
-// test('capture_hold', function(hold_customer) {
-//     var cb = this;
-//     debugger;
-//     hold_customer.debit({}, back(true, cb));
+// test('capture_hold', function(hold_card) {
+//     return hold_card.debit({});
 // });

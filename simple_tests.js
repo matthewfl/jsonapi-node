@@ -85,6 +85,7 @@ function run(name) {
 		finish(val);
 	    }, function(err) {
 		console.error(err)
+		debugger;
 		finish.assert(false);
 		finish(err);
 	    });
