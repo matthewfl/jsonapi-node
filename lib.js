@@ -7,7 +7,7 @@ Q.longStackSupport = true;
 
 // helper functions
 
-var log = console.log; //function () {};
+var log = function () {};
 
 function update_obj(obj, with_what) {
     for(var k in with_what)
@@ -174,13 +174,13 @@ jsonapi.prototype.getLink = function (obj, link) {
     });
 };
 
-jsonapi.prototype.create = function(url, data, callback) {
+jsonapi.prototype.create = function(url, data) {
     var self = this;
     if(!data) data = {};
 
     return this._req(url, { 'json': data, 'method': 'POST' }).then(function(json) {
-        var list = self._processResult(json);
-        return list[0];
+	var list = self._processResult(json);
+	return Q(list[0]);
     });
 };
 
@@ -198,7 +198,7 @@ jsonapi.prototype._reg_type = function(type, func) {
     for(var f in func) {
         if(typeof func[f] == 'function') {
             this._promise_action(f);
-	    a.prototype[f] = func[f];
+	    a.prototype[f] = Q.promised(func[f]);
         }else {
             // TODO:
 	    if(func[f] == '_') {
@@ -208,9 +208,16 @@ jsonapi.prototype._reg_type = function(type, func) {
     }
 };
 
-// so sorry
+jsonapi.prototype.Q = Q;
+
+var Q_reserved_names = ['source'];
+
 Q.makePromise.prototype.create = function (args) {
     return this.invoke('create', args);
+};
+
+Q.makePromise.prototype.save = function () {
+    return this.invoke('save');
 };
 
 Q.makePromise.prototype.get = function (name) {
@@ -218,24 +225,45 @@ Q.makePromise.prototype.get = function (name) {
         if(typeof val.get == 'function') {
             return val.get.call(val, name);
         }
-        return Q(val).dispatch('get', name);
+        return val[name];
+    });
+};
+
+Q.makePromise.prototype.set = function(path, value) {
+    // simply a smarter set method
+    return this.then(function (ret) {
+	var p = path.split('.');
+	var f = p.pop();
+	var at = ret;
+	while(p.length)
+	    at = at[p.shift()];
+	at[f] = value;
+	return ret;
     });
 };
 
 jsonapi.prototype._promise_action = function (name) {
-    Q.makePromise.prototype[name] = function () {
-        return Q.spread([this, Q.all(arguments)], function(self, args) {
-            return self[name].apply(self, args);
-        });
-    };
+    if(!Q.makePromise.prototype[name] &&
+       Q_reserved_names.indexOf(name) == -1)
+	Q.makePromise.prototype[name] = function () {
+            return Q.spread([this, Q.all(arguments)], function(self, args) {
+		return self[name].apply(self, args);
+            });
+	};
 };
 
 jsonapi.prototype._promise_item = function (name) {
-    Object.defineProperty(Q.makePromise.prototype, name, {
-	'get': function () {
-	    return this.get(name);
-	}
-    });
+    if(!Q.makePromise.prototype[name] &&
+      Q_reserved_names.indexOf(name) == -1)
+	Object.defineProperty(Q.makePromise.prototype, name, {
+	    'get': function () {
+		return this === Q.makePromise.prototype ? true : this.get(name);
+	    },
+	    'set': function (val) {
+		// we should never be setting a value on a promise
+		throw new Error('Attempted setting field '+name+' on balanced promise');
+	    }
+	});
 };
 
 function make_obj(api, type) {

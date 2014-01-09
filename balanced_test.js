@@ -13,7 +13,7 @@ test('api_key', function () {
 });
 
 test('marketplace', function (api_key) {
-    return balanced.objects.marketplace.create();
+    return balanced.marketplace;
 });
 
 test('customer_create', function(marketplace) {
@@ -82,9 +82,9 @@ test('string_together', function(marketplace) {
             'expiration_year': '2016',
             'expiration_month': '12'
         })
-    ).get('cards').get(0).debit(500);
+    ).cards.get(0).debit(500);
 });
 
-// test('capture_hold', function(hold_card) {
-//     return hold_card.debit({});
-// });
+// // test('capture_hold', function(hold_card) {
+// //     return hold_card.debit({});
+// // });
