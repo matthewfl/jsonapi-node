@@ -84,6 +84,7 @@ function run(name) {
 	    rets.then(function(val) {
 		finish(val);
 	    }, function(err) {
+		console.error(err)
 		finish.assert(false);
 		finish(err);
 	    });

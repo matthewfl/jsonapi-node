@@ -3,6 +3,8 @@ var Q = require('q');
 
 var version = '0.0.1b';
 
+Q.longStackSupport = true;
+
 // helper functions
 
 var log = console.log; //function () {};
@@ -110,8 +112,8 @@ jsonapi.prototype.get = function(path, _list) {
     */
     return self._req(path, 'GET').then(function(json) {
         var list = self._processResult(json);
-        if(_list === true)
-            return list;
+	if(_list === true)
+            return new page_obj(json.meta, list, self);
         return list[0];
     });
     // self._req(path, 'GET', function(err, json) {
@@ -176,10 +178,10 @@ jsonapi.prototype.processLinks = function (links) {
 
 jsonapi.prototype.getLink = function (obj, link) {
     //if(!obj._type || !this.routes[obj._type] && !this.routes[obj._type][link]) return null;
-    log(this, arguments);
+    //log(this, arguments);
     return this.routes[obj._type+'s'][link].href.replace(/\{([\.\w]+)\}/g, function (match, what) {
         var dat = /(\w+)\.(\w+)/.exec(what);
-        return obj[dat[2]];
+        return obj.links[dat[2]] || obj[dat[2]];
     });
 };
 
@@ -226,6 +228,7 @@ jsonapi.prototype._reg_type = function(type, func) {
 function make_obj(api, type) {
 
     function obj (obj) {
+        var self = this;
         this._api = api; // TODO: remove this
         this._type = type;
         this._raw_obj = obj;
@@ -233,6 +236,29 @@ function make_obj(api, type) {
         this.links = {};
         for(var n in obj)
             this[n] = obj[n]; // TODO: make this copy stuff?
+        for(var n in api.routes[type+'s']) {
+            (function (name) {
+		var val=null;
+		Object.defineProperty(self, name, {
+		    'get': function () {
+                    	if(val) return dummy_obj(Q(val));
+			var link = self._api.getLink(self, name);
+			if(!link) return Q.reject(new Error('could not find link for '+name+' from '+self._type));
+			if(self.links[name]) {
+			    return dummy_obj(self._api.get(link, false)
+					     .then(function (ret) {
+						 return val = ret;
+					     }));
+			}else{
+			    return dummy_obj(self._api.get(link, true)
+					     .then(function(ret) {
+						 return val = ret;
+					     }));
+			}
+		    }
+		});
+	    })(n);
+        }
     }
 
     //obj.prototype._type = function () { return type; };
@@ -258,44 +284,46 @@ function make_obj(api, type) {
     };
 
     obj.prototype.get = function (what, _list) {
-        var pre = this._loaded ? Q.resolve() : this.refresh();
+	var self = this;
+        var pre = this._loaded ? Q() : this.refresh();
         return pre.then(function() {
-            if(typeof this[what] != 'undefined') {
-                return Q.resolve(this[what]);
+            //debugger;
+	    if(self[what]) {
+                return Q(self[what]);
                 //return callback(null, this[what]);
             }
-            if(typeof this.links[what] != 'undefined') {
-                if(this.links[what])
-                    return this._api.get(this.links[what]);
-                else
-                    return Q.reject(new Error(this._type + ' ' + this.href + ' does not have a '+what+' associated'));
-            }
-            var link = this._api.getLink(this, what);
+            // if(typeof this.links[what] != 'undefined') {
+            //     if(this.links[what])
+            //         return this._api.get(this.links[what]);
+            //     else
+            //         return Q.reject(new Error(this._type + ' ' + this.href + ' does not have a '+what+' associated'));
+            // }
+            var link = self._api.getLink(self, what);
             if(!link) return Q.reject(new Error('could not compute link '+what+' for '+obj._type), null);
-            return this._api.get(link, _list);
+            return self._api.get(link, _list);
         });
     };
 
     obj.prototype.create = function (what, data) {
-	var self = this;
-	if(typeof what != 'string') {
-	    data = what || {};
-	    return this._api._req(this.href, { 'json': data, 'method': 'POST' }).then(function (json) {
+        var self = this;
+        if(typeof what != 'string') {
+            data = what || {};
+            return this._api._req(this.href, { 'json': data, 'method': 'POST' }).then(function (json) {
                 var list = self._api._processResult(json);
                 return list[0];
             });
-	}
-	var pre = this._loaded ? Q.resolve() : this.refresh();
+        }
+        var pre = this._loaded ? Q() : this.refresh();
         return pre.then(function () {
-	    var link;
-	    what += 's';
+            var link;
+            what += 's';
             if(!data) data = {};
-            if(this.links[what]) {
-                link = this.links[what];
+            if(self.links[what]) {
+                link = self.links[what];
             }else{
-                link = this._api.getLink(this, what);
+                link = self._api.getLink(self, what);
             }
-            if(!link) return Q.reject(new Error('could not find link for '+what+' from '+this._type), null);
+            if(!link) return Q.reject(new Error('could not find link for '+what+' from '+self._type), null);
             return this._api._req(link, { 'json': data, 'method': 'POST' }).then(function (json) {
                 var list = self._api._processResult(json);
                 return list[0];
@@ -363,8 +391,8 @@ function make_obj(api, type) {
 
     obj.prototype._add_action = function (act) {
         if(!obj.prototype[act])
-            obj.prototype[act] = function (args, callback) {
-                return this.do(act, args, callback);
+            obj.prototype[act] = function (args) {
+                return this.do(act, args);
             };
     };
 
@@ -377,3 +405,65 @@ function make_obj(api, type) {
     return obj;
 
 }
+
+
+function dummy_obj(obj) {
+    obj.create = function(args) {
+        return this.then(function (a) {
+	    console.log(a);
+	    console.log('asdfasdfasdfasdfasdf')
+	    //debugger;
+	    return a;
+	}).invoke('create', args);
+    };
+    return obj;
+}
+
+// this page object is balanced specific atm
+// todo: fix that???
+
+function page_obj(meta, objs, api) {
+//     "meta": {
+// <     "last": "/customers?limit=10&offset=0",
+// <     "next": null,
+// <     "href": "/customers?limit=10&offset=0",
+// <     "limit": 10,
+// <     "offset": 0,
+// <     "previous": null,
+// <     "total": 1,
+// <     "first": "/customers?limit=10&offset=0"
+// <   },
+    this._api = api;
+    this._objs = {};
+    //debugger;
+    this._load(meta, objs);
+}
+
+page_obj.prototype._load = function (meta, list) {
+    this._meta = meta;
+    this._base_url = this._meta.href.split('?')[0];
+    for(var n in list) {
+	this._objs[n + this._meta.offset] = list[n];
+    }
+};
+
+page_obj.prototype.total = function () {
+    return this._meta.total;
+};
+
+page_obj.prototype.create = function (args) {
+    return this._api.create(this._base_url, args);
+};
+
+page_obj.prototype.get = function (index) {
+    if(this._objs[index])
+	return Q(this._objs[index]);
+    var self = this;
+    var look = index - index % 10;
+    var href = this._base_url + '?limit=10&offset=' + look;
+    return this._api._req(href, 'GET').then(function (json) {
+	var list = self._api._processResult(json);
+	self._load(json.meta, list);
+	return self._objs[index];
+    });
+};
