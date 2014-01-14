@@ -31,7 +31,6 @@ balanced._reg_type('marketplace', {
 var marketplace_href; // by keeping the href, the cache is manage by the jsonapi client
 Object.defineProperty(balanced, 'marketplace', {
     'get': function () {
-        console.log('calling marketplace get');
         return marketplace_href ? balanced.get(marketplace_href) : balanced.get('marketplaces').then(function (mp) {
             if(mp && mp.href) {
                 marketplace_href = mp.href;
@@ -58,29 +57,21 @@ balanced._reg_type('customer', {
     add_bank_account: set_customer
 });
 
+function transaction_create(type) {
+    return function (args) {
+	if(typeof args == 'number') args = {amount: args};
+	return this.create(type, args);
+    }
+}
+
 balanced._reg_type('card', {
-    debit: function(args) {
-        if(typeof args == 'number') args = {amount: args};
-        return this.create('debit', args);
-    },
-    hold: function (args) {
-        if(typeof args == 'number') args = {amount: args};
-        return this.create('card_hold', args);
-    },
+    debit: transaction_create('debit'),
+    hold: transaction_create('card_hold'),
 });
 balanced._reg_type('bank_account', {
-    debit: function (args) {
-        if(typeof args == 'number') args = {amount: args};
-        return this.create('debit', args);
-    },
-    credit: function (args) {
-        if(typeof args == 'number') args = {amount: args};
-        return this.create('credit', args);
-    }
+    debit: transaction_create('debit'),
+    credit: transaction_create('credit')
 });
 balanced._reg_type('card_hold', {
-    debit: function () {
-        if(typeof args == 'number') args = {amount: args};
-        return this.create('debit', args);
-    }
+    debit: transaction_create('debit')
 });
