@@ -279,6 +279,8 @@ jsonapi.prototype._promise_item = function (name) {
         });
 };
 
+jsonapi.prototype._promise_action('filter');
+
 jsonapi.prototype._manage_cache = function () {
     var now = new Date;
     if(now - this.last_cache_clean > this.cache_time_limit) {
@@ -492,10 +494,6 @@ Object.defineProperty(page_obj.prototype, 'length', {
     }
 });
 
-page_obj.prototype.total = function () {
-    return this._meta.total;
-};
-
 page_obj.prototype.create = function (args) {
     var query = url.parse(this._url, true);
     return this._api.create(query.pathname, args);
@@ -528,17 +526,17 @@ page_obj.prototype.get = function (index) {
         var list = self._api._processResult(json);
         self._load(json.meta, list);
         defered.resolve();
-        return self._api.get(self._objs[index]);
+        return self._objs[index] ? self._api.get(self._objs[index]) : undefined;
     });
 };
 
-page_obj.prototype.filter = function (name_or_dict, opt_value) {
+page_obj.prototype.filter = function (name_or_dict, value) {
     var dict = {};
     if(typeof name_or_dict == 'string')
-        dict[name_or_dict] = opt_value
+        dict[name_or_dict] = value;
     else
         dict = name_or_dict;
-    var query = url.parse(this._url);
+    var query = url.parse(this._url, true);
     update_obj(query.query, dict);
     return new page_obj(this._api, url.format(query));
 };
@@ -546,7 +544,7 @@ page_obj.prototype.filter = function (name_or_dict, opt_value) {
 Object.defineProperty(page_obj.prototype, 'all', {
     get: function () {
         var self = this;
-        this.length.then(function (length) {
+        return this.length.then(function (length) {
             var ret = [];
             for(var a = 0; a < length; a++) {
                 ret.push(self.get(a));
