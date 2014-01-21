@@ -4,8 +4,6 @@ var url= require('url');
 
 var version = require('./package.json').version;
 
-Q.longStackSupport = true;
-
 // helper functions
 
 var log = function () {};
@@ -79,8 +77,6 @@ jsonapi.prototype._req = function (path, method) {
     var ret = Q.defer();
     request(params, function(err, req, body) {
         if(err) {
-            console.error(err);
-            debugger;
             ret.reject(err);
             return;
         }
@@ -94,9 +90,7 @@ jsonapi.prototype._req = function (path, method) {
             self._processLinks(json.links);
             return ret.resolve(json);
         } catch(e) {
-            console.error(e);
-            debugger;
-            throw e;
+            ret.reject(e);
         }
     });
     return ret.promise;
@@ -104,11 +98,11 @@ jsonapi.prototype._req = function (path, method) {
 
 jsonapi.prototype.get = function(path, _list) {
     var self = this;
-    self._manage_cache();
     if(!path)
         return Q.reject(new Error('Can not resolve undefined path'));
     if(_list !== true && self.cache[path])
         return Q(self.cache[path]);
+    self._manage_cache();
     if(_list === true)
         return Q(new page_obj(self, path));
     return self._req(path, 'GET').then(function(json) {
@@ -168,7 +162,7 @@ jsonapi.prototype._processLinks = function (links) {
         if(route.fields) {
             this._new_obj(dat[1].replace(/s$/, ''), {})._add_action(dat[2]);
         }else{
-            this._promise_item(dat[2]);
+	    _promise_something(dat[2]);
         }
     }
 };
@@ -202,16 +196,11 @@ jsonapi.prototype._new_obj = function(type, dat) {
 jsonapi.prototype._reg_type = function(type, func) {
     if(!this.objects[type])
         this[type] = this.objects[type] = make_obj(this, type);
-    var a = this.objects[type]
+    var a = this.objects[type];
     for(var f in func) {
+	_promise_something(f);
         if(typeof func[f] == 'function') {
-            this._promise_action(f);
             a.prototype[f] = Q.promised(func[f]);
-        }else {
-            // TODO:
-            if(func[f] == '_') {
-                this._promise_item(f);
-            }
         }
     }
 };
@@ -229,6 +218,8 @@ Q.makePromise.prototype.save = function () {
 };
 
 Q.makePromise.prototype.get = function (name) {
+    if(!this.then || !this.promiseDispatch)
+	debugger;
     return this.then(function(val) {
         name = (name+'').split('.');
         var base = name.shift(), rest = name.join('.'), ret
@@ -247,39 +238,52 @@ Q.makePromise.prototype.set = function(path, value) {
     return this.then(function (ret) {
         var p = path.split('.');
         var f = p.pop();
-        var at = ret;
-        while(p.length)
-            at = at[p.shift()];
-        at[f] = value;
-        return ret;
+	return (p ? ret.get(p.join('.')) : Q(ret)).then(function (obj) {
+	    obj[f] = value;
+	    return ret;
+	});
     });
 };
 
-jsonapi.prototype._promise_action = function (name) {
+function _promise_something(name) {
     if(!Q.makePromise.prototype[name] &&
-       Q_reserved_names.indexOf(name) == -1)
-        Q.makePromise.prototype[name] = function () {
-            return Q.spread([this, Q.all(arguments)], function(self, args) {
-                return self[name].apply(self, args);
-            });
-        };
-};
+       Q_reserved_names.indexOf(name) == -1) {
+	Object.defineProperty(Q.makePromise.prototype, name, {
+	    'get': function () {
+		if(this === Q.makePromise.prototype)
+		    return true; // we are not operating on a object
 
-jsonapi.prototype._promise_item = function (name) {
-    if(!Q.makePromise.prototype[name] &&
-       Q_reserved_names.indexOf(name) == -1)
-        Object.defineProperty(Q.makePromise.prototype, name, {
-            'get': function () {
-                return this === Q.makePromise.prototype ? true : this.get(name);
-            },
-            'set': function (val) {
-                // we should never be setting a value on a promise
-                throw new Error('Attempted setting field '+name+' on balanced promise');
-            }
-        });
-};
+		var self = this;
+		var gotten;
+		function act() {
+		    return Q.spread([self, Q.all(arguments)], function(self, args) {
+			return self[name].apply(self, args);
+		    });
+		}
+		for(var elem in Q.makePromise.prototype) {
+		    (function (elem) {
+			Object.defineProperty(act, elem, {
+			    'get': function () {
+				// not working
+				if(!gotten) gotten = self.get(name);
+				if(typeof gotten[elem] == 'function') {
+				    return function () {
+					return gotten[elem].apply(gotten, arguments);
+				    };
+				}else
+				    return gotten[elem];
+			    }
+			});
+		    })(elem);
+		}
+		return act;
+	    }
+	});
 
-jsonapi.prototype._promise_action('filter');
+   }
+}
+
+_promise_something('filter');
 
 jsonapi.prototype._manage_cache = function () {
     var now = new Date;
@@ -297,7 +301,7 @@ function make_obj(api, type) {
 
     function obj (obj) {
         var self = this;
-        this._api = api; // TODO: remove this
+        this._api = api; // TODO: remove this ?
         this._type = type;
         this._raw_obj = obj;
         this._loaded = true;
@@ -402,7 +406,6 @@ function make_obj(api, type) {
                 }
             }
         }
-        //var url = this._api._getLink(this, act.href)
         var url = handle_bars(collect, act.href);
         return this._api._req(url, { 'json': args, method: act.method }).then(function (json){
             var list = self._api._processResult(json);
@@ -471,8 +474,6 @@ function page_obj(api, url) {
     this._url = url;
     this._objs = {};
     this._meta = null;
-    //debugger;
-    //this._load(meta, objs);
 }
 
 page_obj.prototype._load = function (meta, list) {
