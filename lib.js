@@ -53,7 +53,7 @@ function jsonapi(base_url, args) {
     this.routes = {};
     this.cache = {};
     this.last_cache_clean = new Date;
-    this.cache_time_limit = (args.request_time_limit || 60) * 1000;
+    this.cache_time_limit = (this.request_args.request_time_limit || 60) * 1000;
     this.objects = {};
     this.action_names = {};
     this.request_args.headers['User-Agent'] += ' node-jsonapi/'+version+' node/'+process.version;
@@ -75,23 +75,25 @@ jsonapi.prototype._req = function (path, method) {
     params.uri = params.uri.replace(/([^:])\/+/g, '$1/');
     log('Making request: ', JSON.stringify(params, null, 4));
     var ret = Q.defer();
-    request(params, function(err, req, body) {
-        if(err) {
-            ret.reject(err);
-            return;
-        }
-        if(req.statusCode >= 400) {
-            var e = new Error('http error code: \n' + typeof body == 'string' ? body : JSON.stringify(body, null, 4));
-            return ret.reject(e);
-        }
-        log('result: ', body);
-        try {
-            var json = typeof body == 'string' ? JSON.parse(req.body) : body;
-            self._processLinks(json.links);
-            return ret.resolve(json);
-        } catch(e) {
-            ret.reject(e);
-        }
+    Q.JSONpromise(params).then(function (params) {
+        request(params, function(err, req, body) {
+            if(err) {
+                ret.reject(err);
+                return;
+            }
+            if(req.statusCode >= 400) {
+                var e = new Error('http error code: \n' + typeof body == 'string' ? body : JSON.stringify(body, null, 4));
+                return ret.reject(e);
+            }
+            log('result: ', body);
+            try {
+                var json = typeof body == 'string' ? JSON.parse(req.body) : body;
+                self._processLinks(json.links);
+                return ret.resolve(json);
+            } catch(e) {
+                ret.reject(e);
+            }
+        });
     });
     return ret.promise;
 };
@@ -162,7 +164,7 @@ jsonapi.prototype._processLinks = function (links) {
         if(route.fields) {
             this._new_obj(dat[1].replace(/s$/, ''), {})._add_action(dat[2]);
         }else{
-	    _promise_something(dat[2]);
+            _promise_something(dat[2]);
         }
     }
 };
@@ -170,7 +172,7 @@ jsonapi.prototype._processLinks = function (links) {
 jsonapi.prototype._getLink = function (obj, link) {
     return this.routes[obj._type+'s'][link].href.replace(/\{([\.\w]+)\}/g, function (match, what) {
         var dat = /(\w+)\.(\w+)/.exec(what);
-        return obj.links[dat[2]] || obj[dat[2]];
+        return obj._raw_obj.links[dat[2]] || obj._raw_obj[dat[2]];
     });
 };
 
@@ -198,7 +200,7 @@ jsonapi.prototype._reg_type = function(type, func) {
         this[type] = this.objects[type] = make_obj(this, type);
     var a = this.objects[type];
     for(var f in func) {
-	_promise_something(f);
+        _promise_something(f);
         if(typeof func[f] == 'function') {
             a.prototype[f] = Q.promised(func[f]);
         }
@@ -219,7 +221,7 @@ Q.makePromise.prototype.save = function () {
 
 Q.makePromise.prototype.get = function (name) {
     if(!this.then || !this.promiseDispatch)
-	debugger;
+        debugger;
     return this.then(function(val) {
         name = (name+'').split('.');
         var base = name.shift(), rest = name.join('.'), ret
@@ -238,47 +240,68 @@ Q.makePromise.prototype.set = function(path, value) {
     return this.then(function (ret) {
         var p = path.split('.');
         var f = p.pop();
-	return (p ? ret.get(p.join('.')) : Q(ret)).then(function (obj) {
-	    obj[f] = value;
-	    return ret;
-	});
+        return (p ? ret.get(p.join('.')) : Q(ret)).then(function (obj) {
+            obj[f] = value;
+            return ret;
+        });
     });
+};
+
+Q.JSONpromise = function JSONpromise(json) {
+    if(json instanceof Array) {
+        return Q.all(json);
+    }
+    if(typeof json == 'object' && json != null) {
+        var w = [], q = [];
+        for(var name in json) {
+            q.push(JSONpromise(json[name]));
+            w.push(name);
+        }
+        return Q.all(q).then(function (q) {
+            var ret = {};
+            for(var a = 0; a < q.length; a++) {
+                ret[w[a]] = q[a];
+            }
+            return ret;
+        });
+    }
+    return json;
 };
 
 function _promise_something(name) {
     if(!Q.makePromise.prototype[name] &&
        Q_reserved_names.indexOf(name) == -1) {
-	Object.defineProperty(Q.makePromise.prototype, name, {
-	    'get': function () {
-		if(this === Q.makePromise.prototype)
-		    return true; // we are not operating on a object
+        Object.defineProperty(Q.makePromise.prototype, name, {
+            'get': function () {
+                if(this === Q.makePromise.prototype)
+                    return true; // we are not operating on a object
 
-		var self = this;
-		var gotten;
-		function act() {
-		    return Q.spread([self, Q.all(arguments)], function(self, args) {
-			return self[name].apply(self, args);
-		    });
-		}
-		for(var elem in Q.makePromise.prototype) {
-		    (function (elem) {
-			Object.defineProperty(act, elem, {
-			    'get': function () {
-				// not working
-				if(!gotten) gotten = self.get(name);
-				if(typeof gotten[elem] == 'function') {
-				    return function () {
-					return gotten[elem].apply(gotten, arguments);
-				    };
-				}else
-				    return gotten[elem];
-			    }
-			});
-		    })(elem);
-		}
-		return act;
-	    }
-	});
+                var self = this;
+                var gotten;
+                function act() {
+                    return Q.spread([self, Q.all(arguments)], function(self, args) {
+                        return self[name].apply(self, args);
+                    });
+                }
+                for(var elem in Q.makePromise.prototype) {
+                    (function (elem) {
+                        Object.defineProperty(act, elem, {
+                            'get': function () {
+                                // not working
+                                if(!gotten) gotten = self.get(name);
+                                if(typeof gotten[elem] == 'function') {
+                                    return function () {
+                                        return gotten[elem].apply(gotten, arguments);
+                                    };
+                                }else
+                                    return gotten[elem];
+                            }
+                        });
+                    })(elem);
+                }
+                return act;
+            }
+        });
 
    }
 }
