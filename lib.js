@@ -219,6 +219,10 @@ Q.makePromise.prototype.save = function () {
     return this.invoke('save');
 };
 
+Q.makePromise.prototype.refresh = function () {
+    return this.invoke('refresh');
+};
+
 Q.makePromise.prototype.get = function (name) {
     if(!this.then || !this.promiseDispatch)
         debugger;
@@ -251,7 +255,7 @@ Q.JSONpromise = function JSONpromise(json) {
     if(json instanceof Array) {
         return Q.all(json);
     }
-    if(typeof json == 'object' && json != null) {
+    if(typeof json == 'object' && json != null && !(json instanceof Q.makePromise)) {
         var w = [], q = [];
         for(var name in json) {
             q.push(JSONpromise(json[name]));
@@ -407,7 +411,7 @@ function make_obj(api, type) {
         return api.create(type + 's', data);
     };
 
-    obj.prototype.delete = function () {
+    obj.prototype.unstore = obj.prototype.delete = function () {
         var self = this, href = this.href;
         return this._api._req(href, { 'method': 'DELETE' }).then(function (json) {
             delete self._api.cache[href];
@@ -471,7 +475,11 @@ function make_obj(api, type) {
     obj.prototype.list = jsonapi.prototype.list;
 
     obj.prototype.refresh = function () {
-        return this._api.get(this.href);
+	var self = this;
+	return this._api._req(this.href, 'GET').then(function (json) {
+	    var list = self._api._processResult(json);
+	    return list[0];
+	});
     };
 
     return obj;
