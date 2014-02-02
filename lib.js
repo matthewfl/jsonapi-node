@@ -85,6 +85,9 @@ jsonapi.prototype._req = function (path, method) {
                 var e = new Error('http error code: \n' + typeof body == 'string' ? body : JSON.stringify(body, null, 4));
                 return ret.reject(e);
             }
+            if(req.statusCode == 204) { // no content
+                return ret.resolve(null);
+            }
             log('result: ', body);
             try {
                 var json = typeof body == 'string' ? JSON.parse(req.body) : body;
@@ -307,7 +310,7 @@ function _promise_something(name) {
             }
         });
 
-   }
+    }
 }
 
 _promise_something('filter');
@@ -475,11 +478,11 @@ function make_obj(api, type) {
     obj.prototype.list = jsonapi.prototype.list;
 
     obj.prototype.refresh = function () {
-	var self = this;
-	return this._api._req(this.href, 'GET').then(function (json) {
-	    var list = self._api._processResult(json);
-	    return list[0];
-	});
+        var self = this;
+        return this._api._req(this.href, 'GET').then(function (json) {
+            var list = self._api._processResult(json);
+            return list[0];
+        });
     };
 
     return obj;
