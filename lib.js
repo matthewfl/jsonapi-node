@@ -8,6 +8,8 @@ var version = require('./package.json').version;
 
 var log = function () {};
 
+//Q.longStackSupport = true;
+
 function update_obj(obj, with_what) {
     for(var k in with_what)
         obj[k] = with_what[k];
@@ -243,10 +245,10 @@ Q.makePromise.prototype.get = function (name) {
     return this.then(function(val) {
         name = (name+'').split('.');
         var base = name.shift(), rest = name.join('.'), ret;
-        if(typeof val.get == 'function') {
+        if(typeof val.get === 'function') {
             ret = val.get.call(val, base);
         }else
-            ret = val[name];
+            ret = val[base];
         if(rest)
             return Q(ret).get(rest);
         return ret;
@@ -255,10 +257,26 @@ Q.makePromise.prototype.get = function (name) {
 
 Q.makePromise.prototype.set = function(path, value) {
     // simply a smarter set method
+    var p = path.split('.'),
+    f = p.pop(), self = this,
+    o = this;
+    if(p)
+        o = o.get(p);
+    return o.then(function (obj) {
+        console.log(path);
+        if(typeof obj.set === 'function')
+            obj.set(f, value);
+        else
+            obj[f] = value;
+        return self;
+    });
+/*
     return this.then(function (ret) {
-        var p = path.split('.');
-        var f = p.pop();
-        return (p ? ret.get(p.join('.')) : Q(ret)).then(function (obj) {
+        var o = Q(ret);
+        if(p)
+            o = o.get(p);
+        debugger;
+        return o.then(function (obj) {
             if(typeof obj.set == 'function')
                 obj.set(f, value);
             else
@@ -266,6 +284,7 @@ Q.makePromise.prototype.set = function(path, value) {
             return ret;
         });
     });
+*/
 };
 
 Q.JSONpromise = function JSONpromise(json) {
@@ -354,6 +373,7 @@ function make_obj(api, type) {
         this._load_time = new Date;
         this._href = from.href;
         this._set_values = {};
+        this._deferred = from._deferred || false;
         if(!this._href) {
             // if this object does not have a link
             // then fallback on just copying over the fields
@@ -366,7 +386,9 @@ function make_obj(api, type) {
                     Object.defineProperty(obj.prototype, name, {
                         'get': function () {
                             if(this === obj.prototype) return true; // not working on an object
-                            return Q(this._set_values[name] || this.get(name));
+                            if(this._deferred)
+                                return this.get(name);
+                            return this._set_values[name] || this._api.cache[this._href][name];
                         },
                         'set': function (value) {
                             this.set(name, value);
@@ -407,9 +429,11 @@ function make_obj(api, type) {
     Object.defineProperty(obj.prototype, 'links', {
         'get': function () {
             var self = this;
+            if(!this._deferred)
+                return this._api.cache[this._href].links;
             if(this._api.cache[this._href])
-                return Q(this._api.cache[this._href]);
-            return this.refresh().then(function () {
+                return Q(this._api.cache[this._href].links);
+            return this._loaded().then(function () {
                 return self._api.cache[self._href].links;
             })
         }
@@ -464,7 +488,8 @@ function make_obj(api, type) {
     };
 
     obj.prototype.set = function (path, value) {
-        this._loaded().set(path, value);
+
+        return this._loaded().set(path, value).thenResolve(this);
     };
 
     obj.prototype.create = function (what, data) {
@@ -543,7 +568,7 @@ function make_obj(api, type) {
     */
 
     obj.prototype.toJSON = function () {
-        return combine_obj(this._raw_obj, this._set_values);
+        return combine_obj(this._raw_obj, this, this._set_values);
         var obj = combine_obj(this._raw_obj);
         for(var n in this) {
             if(n[0] == '_') continue;
@@ -560,7 +585,7 @@ function make_obj(api, type) {
             };
     };
 
-    obj.prototype.list = jsonapi.prototype.list;
+    //obj.prototype.list = jsonapi.prototype.list;
 
     obj.prototype.refresh = function () {
         debugger
@@ -573,8 +598,13 @@ function make_obj(api, type) {
 
     obj.find = function(href) {
         return api._new_obj(type, {
-            href: href
+            href: href,
+            _deferred: true
         });
+    };
+
+    obj.prototype.toString = function () {
+        return '[object jsonapi-'+this._type+']';
     };
 
     return obj;
@@ -704,4 +734,10 @@ page_obj.prototype.all = function () {
         }
         return Q.all(ret);
     });
+};
+
+page_obj.prototype.refresh = function () {
+    this._objs = {};
+    this._meta = null;
+    return this;
 };
