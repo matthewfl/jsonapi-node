@@ -232,6 +232,14 @@ Q.makePromise.prototype.unstore = function () {
     return this.invoke('unstore');
 };
 
+Q.makePromise.prototype.first = function () {
+    return this.invoke('first');
+};
+
+Q.makePromise.prototype.one = function () {
+    return this.invoke('one');
+};
+
 Q.makePromise.prototype.get = function (name) {
     if(!this.then || !this.promiseDispatch)
         debugger;
