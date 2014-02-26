@@ -103,21 +103,23 @@ jsonapi.prototype._req = function (path, method) {
 
 jsonapi.prototype.get = function(path, _list) {
     var self = this;
-    if(!path)
-        return Q.reject(new Error('Can not resolve undefined path'));
-    if(_list !== true && self.cache[path])
-        return Q(self.cache[path]);
-    self._manage_cache();
-    if(_list === true)
-        return Q(new page_obj(self, path));
-    return self._req(path, 'GET').then(function(json) {
-        var list = self._processResult(json);
-        for(var a = 0; a < list.length; a++) {
-            if(list[a].href == path) {
-                return list[a];
+    return Q(path).then(function (path) {
+        if(!path)
+            return Q.reject(new Error('Can not resolve undefined path'));
+        if(_list !== true && self.cache[path])
+            return Q(self.cache[path]);
+        self._manage_cache();
+        if(_list === true)
+            return Q(new page_obj(self, path));
+        return self._req(path, 'GET').then(function(json) {
+            var list = self._processResult(json);
+            for(var a = 0; a < list.length; a++) {
+                if(list[a].href == path) {
+                    return list[a];
+                }
             }
-        }
-        return list[0];
+            return list[0];
+        });
     });
 };
 
@@ -224,6 +226,10 @@ Q.makePromise.prototype.save = function () {
 
 Q.makePromise.prototype.refresh = function () {
     return this.invoke('refresh');
+};
+
+Q.makePromise.prototype.unstore = function () {
+    return this.invoke('unstore');
 };
 
 Q.makePromise.prototype.get = function (name) {
@@ -523,7 +529,7 @@ Object.defineProperty(page_obj.prototype, 'length', {
         if(this._meta)
             return Q(this._meta.total);
         else
-            this.get(0).then(function () {
+            return this.get(0).then(function () {
                 return self._meta.total;
             });
     }
@@ -575,6 +581,25 @@ page_obj.prototype.filter = function (name_or_dict, value) {
     update_obj(query.query, dict);
     return new page_obj(this._api, url.format(query));
 };
+
+page_obj.prototype.first = function () {
+    var self = this;
+    return this.get(0).catch(function (err) {
+        if(typeof self._objs[0] != 'string')
+            return null;
+        return Q.reject(err); // not our error to catch
+    });
+};
+
+page_obj.prototype.one = function () {
+    var self = this;
+    return this.length(function (length) {
+        if(length != 1)
+            return Q.reject(new Error('Page '+self._url+' does not have exactly one item, it has '+length));
+        return self.get(0);
+    });
+};
+
 
 Object.defineProperty(page_obj.prototype, 'all', {
     get: function () {

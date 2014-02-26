@@ -1,6 +1,6 @@
 {
   "name": "jsonapi-client",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "main": "lib.js",
   "dependencies": {
     "request": "~2.31.0",
