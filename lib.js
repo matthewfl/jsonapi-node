@@ -8,7 +8,7 @@ var version = require('./package.json').version;
 
 var log = function () {};
 
-Q.longStackSupport = true;
+//Q.longStackSupport = true;
 
 function update_obj(obj, with_what) {
     for(var k in with_what)
@@ -267,21 +267,6 @@ Q.makePromise.prototype.set = function(path, value) {
             obj[f] = value;
         return self;
     });
-    /*
-      return this.then(function (ret) {
-      var o = Q(ret);
-      if(p)
-      o = o.get(p);
-      debugger;
-      return o.then(function (obj) {
-      if(typeof obj.set == 'function')
-      obj.set(f, value);
-      else
-      obj[f] = value;
-      return ret;
-      });
-      });
-    */
 };
 
 Q.JSONpromise = function JSONpromise(json) {
@@ -307,8 +292,6 @@ Q.JSONpromise = function JSONpromise(json) {
     return json;
 };
 
-//Q.makePromise.prototype[''] = null;
-
 function _promise_something(name) {
     if(!Q.makePromise.prototype[name] &&
        Q_reserved_names.indexOf(name) == -1) {
@@ -329,9 +312,7 @@ function _promise_something(name) {
                     (function (elem) {
                         Object.defineProperty(act, elem, {
                             'get': function () {
-                                // not working
                                 if(!gotten) gotten = self.get(name);
-                                //if(elem == '') return gotten;
                                 if(typeof gotten[elem] == 'function') {
                                     return function () {
                                         return gotten[elem].apply(gotten, arguments);
@@ -368,9 +349,6 @@ function make_obj(api, type) {
     function obj (from) {
         var self = this;
         this._api = api; // TODO: remove this ?
-        //this._type = type;
-        //this._raw_obj = obj;
-        //this._loaded = '_loaded' in obj ? obj._loaded : true;
         this._load_time = new Date;
         this._href = from.href;
         this._set_values = {};
@@ -408,13 +386,6 @@ function make_obj(api, type) {
                         },
                         'set': function (value) {
                             this._set_values[name] = value;
-                            //this.set(name, value);
-                            /*this._set_values[name] = value;
-                              this._loaded().then(function (a) {
-                              debugger;
-                              a[name] = value;
-                              });//set(name, value);
-                            */
                         }
                     });
                 })(n);
@@ -551,22 +522,6 @@ function make_obj(api, type) {
             return list[0] || null;
         });
     };
-    /*
-      obj.prototype._update = function (dat) {
-      // clear the object
-      for(var n in this)
-      if(this.hasOwnProperty(n) && n != '_api' && n != '_type')
-      delete this[n];
-
-      // same as init in copying over object
-      this.links = {};
-      this._raw_obj = dat;
-      //this._loaded = true;
-      //this._load_time = new Date;
-      for(var n in dat)
-      this[n] = dat[n];
-      };
-    */
 
     obj.prototype.toJSON = function () {
         return combine_obj(this._raw_obj, this, this._set_values);
@@ -585,8 +540,6 @@ function make_obj(api, type) {
                 return this.do(act, args);
             };
     };
-
-    //obj.prototype.list = jsonapi.prototype.list;
 
     obj.prototype.refresh = function () {
         var self = this;
