@@ -199,7 +199,7 @@ jsonapi.prototype._new_obj = function(type, dat) {
     }
 };
 
-jsonapi.prototype._reg_type = function(type, func) {
+jsonapi.prototype.registerType= function(type, func) {
     if(!this.objects[type])
         this[type] = this.objects[type] = make_obj(this, type);
     var a = this.objects[type];
