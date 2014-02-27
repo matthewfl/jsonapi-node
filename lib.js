@@ -8,7 +8,7 @@ var version = require('./package.json').version;
 
 var log = function () {};
 
-//Q.longStackSupport = true;
+Q.longStackSupport = true;
 
 function update_obj(obj, with_what) {
     for(var k in with_what)
@@ -106,7 +106,6 @@ jsonapi.prototype._req = function (path, method) {
 };
 
 jsonapi.prototype.get = function(path, _list) {
-    console.log('jsonapi .get');
     var self = this;
     return Q(path).then(function (path) {
         if(!path)
@@ -241,7 +240,6 @@ Q.makePromise.prototype.one = function () {
 };
 
 Q.makePromise.prototype.get = function (name) {
-    console.log('promise .get '+name)
     return this.then(function(val) {
         name = (name+'').split('.');
         var base = name.shift(), rest = name.join('.'), ret;
@@ -263,7 +261,6 @@ Q.makePromise.prototype.set = function(path, value) {
     if(p)
         o = o.get(p);
     return o.then(function (obj) {
-        console.log(path);
         if(typeof obj.set === 'function')
             obj.set(f, value);
         else
@@ -310,6 +307,8 @@ Q.JSONpromise = function JSONpromise(json) {
     return json;
 };
 
+//Q.makePromise.prototype[''] = null;
+
 function _promise_something(name) {
     if(!Q.makePromise.prototype[name] &&
        Q_reserved_names.indexOf(name) == -1) {
@@ -325,12 +324,14 @@ function _promise_something(name) {
                         return self[name].apply(self, args);
                     });
                 }
-                for(var elem in Q.makePromise.prototype) {
+								var props = Object.getOwnPropertyNames(Q.makePromise.prototype);
+                for(var a=0; a < props.length; a++) {
                     (function (elem) {
                         Object.defineProperty(act, elem, {
                             'get': function () {
-                                // not working
+																// not working
                                 if(!gotten) gotten = self.get(name);
+																//if(elem == '') return gotten;
                                 if(typeof gotten[elem] == 'function') {
                                     return function () {
                                         return gotten[elem].apply(gotten, arguments);
@@ -339,7 +340,7 @@ function _promise_something(name) {
                                     return gotten[elem];
                             }
                         });
-                    })(elem);
+                    })(props[a]);
                 }
                 return act;
             }
@@ -374,7 +375,22 @@ function make_obj(api, type) {
         this._href = from.href;
         this._set_values = {};
         this._deferred = from._deferred || false;
-        if(!this._href) {
+
+        for(var n in api.routes[type+'s']) {
+            if(obj.prototype[n]) continue;
+            (function (name) {
+                Object.defineProperty(obj.prototype, name, {
+                    'get': function () {
+                        if(this === obj.prototype) return true;
+                        var link = self._api._getLink(self, name);
+                        if(!link) return Q.reject(new Error('could not find link for '+name+' from '+self._type));
+												return self._api.get(link, !self._raw_obj.links[name]);
+                    }
+                });
+            })(n);
+        }
+
+				if(!this._href) {
             // if this object does not have a link
             // then fallback on just copying over the fields
             for(var n in from)
@@ -391,7 +407,8 @@ function make_obj(api, type) {
                             return this._set_values[name] || this._api.cache[this._href][name];
                         },
                         'set': function (value) {
-                            this.set(name, value);
+                            this._set_values[name] = value;
+														//this.set(name, value);
                             /*this._set_values[name] = value;
                               this._loaded().then(function (a) {
                               debugger;
@@ -402,19 +419,6 @@ function make_obj(api, type) {
                     });
                 })(n);
             }
-        }
-        for(var n in api.routes[type+'s']) {
-            if(obj.prototype[n]) continue;
-            (function (name) {
-                Object.defineProperty(obj.prototype, name, {
-                    'get': function () {
-                        if(this === obj.prototype) return true;
-                        var link = self._api._getLink(self, name);
-                        if(!link) return Q.reject(new Error('could not find link for '+name+' from '+self._type));
-                        return self._api.get(link, !self._raw_obj.links[name]);
-                    }
-                });
-            })(n);
         }
     }
 
@@ -470,8 +474,6 @@ function make_obj(api, type) {
     };
 
     obj.prototype.get = function (what, _list) {
-        console.log('obj .get '+what + _list)
-        debugger;
         var self = this;
         return this._loaded().then(function() {
             if(self._set_values[what])
@@ -482,7 +484,6 @@ function make_obj(api, type) {
             if(!link) return Q.reject(new Error('could not compute link '+what+' for '+obj._type), null);
             if(typeof _list == 'undefined')
                 _list = !self._raw_obj.links[what];
-            //debugger;
             return self._api.get(link, _list);
         });
     };
@@ -588,7 +589,6 @@ function make_obj(api, type) {
     //obj.prototype.list = jsonapi.prototype.list;
 
     obj.prototype.refresh = function () {
-        debugger
         var self = this;
         return this._api._req(this._href, 'GET').then(function (json) {
             var list = self._api._processResult(json);
@@ -657,7 +657,6 @@ page_obj.prototype.create = function (args) {
 };
 
 page_obj.prototype.get = function (index) {
-    console.log('page .get '+index);
     var self = this;
     index *= 1;
     if(this._objs[index]) {
