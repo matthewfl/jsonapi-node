@@ -267,21 +267,21 @@ Q.makePromise.prototype.set = function(path, value) {
             obj[f] = value;
         return self;
     });
-/*
-    return this.then(function (ret) {
-        var o = Q(ret);
-        if(p)
-            o = o.get(p);
-        debugger;
-        return o.then(function (obj) {
-            if(typeof obj.set == 'function')
-                obj.set(f, value);
-            else
-                obj[f] = value;
-            return ret;
-        });
-    });
-*/
+    /*
+      return this.then(function (ret) {
+      var o = Q(ret);
+      if(p)
+      o = o.get(p);
+      debugger;
+      return o.then(function (obj) {
+      if(typeof obj.set == 'function')
+      obj.set(f, value);
+      else
+      obj[f] = value;
+      return ret;
+      });
+      });
+    */
 };
 
 Q.JSONpromise = function JSONpromise(json) {
@@ -324,14 +324,14 @@ function _promise_something(name) {
                         return self[name].apply(self, args);
                     });
                 }
-								var props = Object.getOwnPropertyNames(Q.makePromise.prototype);
+                var props = Object.getOwnPropertyNames(Q.makePromise.prototype);
                 for(var a=0; a < props.length; a++) {
                     (function (elem) {
                         Object.defineProperty(act, elem, {
                             'get': function () {
-																// not working
+                                // not working
                                 if(!gotten) gotten = self.get(name);
-																//if(elem == '') return gotten;
+                                //if(elem == '') return gotten;
                                 if(typeof gotten[elem] == 'function') {
                                     return function () {
                                         return gotten[elem].apply(gotten, arguments);
@@ -382,15 +382,15 @@ function make_obj(api, type) {
                 Object.defineProperty(obj.prototype, name, {
                     'get': function () {
                         if(this === obj.prototype) return true;
-                        var link = self._api._getLink(self, name);
-                        if(!link) return Q.reject(new Error('could not find link for '+name+' from '+self._type));
-												return self._api.get(link, !self._raw_obj.links[name]);
+                        var link = self._api._getLink(this, name);
+                        if(!link) return Q.reject(new Error('could not find link for '+name+' from '+this._type));
+                        return this._api.get(link, !this._raw_obj.links[name]);
                     }
                 });
             })(n);
         }
 
-				if(!this._href) {
+        if(!this._href) {
             // if this object does not have a link
             // then fallback on just copying over the fields
             for(var n in from)
@@ -408,7 +408,7 @@ function make_obj(api, type) {
                         },
                         'set': function (value) {
                             this._set_values[name] = value;
-														//this.set(name, value);
+                            //this.set(name, value);
                             /*this._set_values[name] = value;
                               this._loaded().then(function (a) {
                               debugger;
