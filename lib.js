@@ -239,6 +239,10 @@ Q.makePromise.prototype.one = function () {
     return this.invoke('one');
 };
 
+Q.makePromise.prototype.range = function (start, end) {
+    return this.invoke('range', start, end);
+};
+
 Q.makePromise.prototype.get = function (name) {
     return this.then(function(val) {
         name = (name+'').split('.');
@@ -614,11 +618,11 @@ page_obj.prototype.create = function (args) {
     return this._api.create(query.pathname, args);
 };
 
-page_obj.prototype.get = function (index) {
+page_obj.prototype.get = function (index, _catch_err) {
     var self = this;
     index *= 1;
     if(this._objs[index]) {
-        if(typeof this._objs[index] == 'string')
+        if(typeof this._objs[index] === 'string')
             return this._api.get(this._objs[index]);
         else
             // if the object is being requested, but has not resolved yet
@@ -626,6 +630,10 @@ page_obj.prototype.get = function (index) {
             // object is ready
             return this._objs[index].then(function () {
                 return self._objs[index] ? self._api.get(self._objs[index]) : undefined;
+            }).catch(function (err) {
+                if(_catch_err === true && typeof self._objs[index] !== 'string')
+                    return null;
+                return Q.reject(err);
             });
     }
     var look = index - index % 10;
@@ -642,6 +650,10 @@ page_obj.prototype.get = function (index) {
         self._load(json.meta, list);
         defered.resolve();
         return self._objs[index] ? self._api.get(self._objs[index]) : undefined;
+    }).catch(function (err) {
+        if(_catch_err === true && typeof self._objs[index] !== 'string')
+            return null;
+        return Q.reject(err);
     });
 };
 
@@ -659,24 +671,20 @@ page_obj.prototype.filter = function (name_or_dict, value) {
 page_obj.prototype.range = function (start, finish) {
     var ret = [];
     for(var a=start; a < finish; a++) {
-        ret.push(this.get(a));
+        ret.push(this.get(a, true));
     }
     return Q.all(ret);
 };
 
 page_obj.prototype.first = function () {
     var self = this;
-    return this.get(0).catch(function (err) {
-        if(typeof self._objs[0] != 'string')
-            return null;
-        return Q.reject(err); // not our error to catch
-    });
+    return this.get(0, true);
 };
 
 page_obj.prototype.one = function () {
     var self = this;
     return this.length(function (length) {
-        if(length != 1)
+        if(length !== 1)
             return Q.reject(new Error('Page '+self._url+' does not have exactly one item, it has '+length));
         return self.get(0);
     });
