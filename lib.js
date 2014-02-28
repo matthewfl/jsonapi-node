@@ -560,6 +560,12 @@ function make_obj(api, type) {
         return '[object jsonapi-'+this._type+']';
     };
 
+    Object.defineProperty(obj, 'query', {
+        'get': function () {
+            return api.list(type + 's');
+        }
+    });
+
     return obj;
 
 }
