@@ -1,0 +1,2 @@
+This is a api client for jsonapi using promises and a cache to abstract away the non blocking network calls that are made when interacting with an api.
+This client is tested using https://github.com/balanced/balanced-node and it also serves as an example api client.
