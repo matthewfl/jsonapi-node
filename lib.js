@@ -275,7 +275,7 @@ Q.JSONpromise = function JSONpromise(json) {
             json[a] = JSONpromise(json[a]);
         return Q.all(json);
     }
-    if(typeof json == 'object' && json != null && !(json instanceof Q.makePromise)) {
+    if(typeof json === 'object' && json != null && !(json instanceof Q.makePromise)) {
         var w = [], q = [];
         for(var name in json) {
             q.push(JSONpromise(json[name]));
@@ -524,14 +524,13 @@ function make_obj(api, type) {
     };
 
     obj.prototype.toJSON = function () {
-        return combine_obj(this._raw_obj, this, this._set_values);
-        var obj = combine_obj(this._raw_obj);
-        for(var n in this) {
+        var ret = {}, obj = combine_obj(this._raw_obj, this, this._set_values);
+        for(var n in obj) {
             if(n[0] == '_') continue;
-            if(typeof this[n] == 'function') continue;
-            obj[n] = this[n];
+            if(typeof obj[n] == 'function') continue;
+            ret[n] = obj[n];
         }
-        return obj;
+        return ret;
     };
 
     obj.prototype._add_action = function (act) {

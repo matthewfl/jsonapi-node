@@ -1,6 +1,6 @@
 {
     "name": "jsonapi-client",
-    "version": "0.0.6",
+    "version": "0.0.7",
     "main": "lib.js",
     "dependencies": {
         "request": "~2.31.0",
@@ -15,5 +15,5 @@
         "type": "git",
         "url": "https://github.com/matthewfl/jsonapi-node.git"
     },
-		"license": "LGPL-3.0"
+    "license": "LGPL-3.0"
 }
