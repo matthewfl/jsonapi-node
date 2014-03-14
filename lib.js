@@ -55,7 +55,7 @@ function jsonapi(base_url, args) {
     this.routes = {};
     this.cache = {};
     this.last_cache_clean = new Date;
-    this.cache_time_limit = (this.request_args.request_time_limit || 60) * 1000;
+    this.cache_time_limit = (this.request_args.cache_time_limit || 120) * 1000;
     this.objects = {};
     this.action_names = {};
     this.request_args.headers['User-Agent'] += ' node-jsonapi/'+version+' node/'+process.version;
@@ -136,8 +136,10 @@ jsonapi.prototype._processResult = function (json) {
             var o = json[name][i];
             var type = name.replace(/s$/, '');
             o._type = type;
-            if(o.href)
+            if(o.href) {
                 self.cache[o.href] = o;
+                self.cache[o.href]._load_time = new Date;
+            }
             list.push(this._new_obj(type, o));
         }
     }
@@ -300,37 +302,46 @@ function _promise_something(name) {
     if(!Q.makePromise.prototype[name] &&
        Q_reserved_names.indexOf(name) == -1) {
         Object.defineProperty(Q.makePromise.prototype, name, {
-            'get': function () {
-                if(this === Q.makePromise.prototype)
-                    return true; // we are not operating on a object
-
-                var self = this;
-                var gotten;
-                function act() {
-                    return Q.spread([self, Q.all(arguments)], function(self, args) {
-                        return self[name].apply(self, args);
-                    });
-                }
-                var props = Object.getOwnPropertyNames(Q.makePromise.prototype);
-                for(var a=0; a < props.length; a++) {
-                    (function (elem) {
-                        Object.defineProperty(act, elem, {
-                            'get': function () {
-                                if(!gotten) gotten = self.get(name);
-                                if(typeof gotten[elem] == 'function') {
-                                    return function () {
-                                        return gotten[elem].apply(gotten, arguments);
-                                    };
-                                }else
-                                    return gotten[elem];
-                            }
-                        });
-                    })(props[a]);
-                }
-                return act;
-            }
+            'get': _promise_something_container(name)
         });
+    }
+}
 
+function _promise_something_container(name) {
+    return function () {
+        if(this === Q.makePromise.prototype)
+            return true; // we are not operating on a object
+
+        var self = this;
+        var gotten;
+        function act() {
+            return Q.spread([self, Q.all(arguments)], function(self, args) {
+                return self[name].apply(self, args);
+            });
+        }
+        act._promised_something = name;
+        var props = Object.getOwnPropertyNames(Q.makePromise.prototype);
+        for(var a=0; a < props.length; a++) {
+            (function (elem) {
+                Object.defineProperty(act, elem, {
+                    'get': function () {
+                        if(!gotten) gotten = self.get(name);
+                        if(typeof gotten[elem] == 'function') {
+                            if(gotten[elem]._promised_something) {
+                                // this is another promise, so we can just return it
+                                return gotten[elem];
+                            }else{
+                                return function () {
+                                    return gotten[elem].apply(gotten, arguments);
+                                };
+                            }
+                        }else
+                            return gotten[elem];
+                    }
+                });
+            })(props[a]);
+        }
+        return act;
     }
 }
 
@@ -344,8 +355,8 @@ jsonapi.prototype._manage_cache = function () {
                 delete this.cache[k];
             }
         }
+        this.last_cache_clean = now;
     }
-    this.last_cache_clean = now;
 };
 
 function make_obj(api, type) {
@@ -353,7 +364,6 @@ function make_obj(api, type) {
     function obj (from) {
         var self = this;
         this._api = api; // TODO: remove this ?
-        this._load_time = new Date;
         this._href = from.href;
         this._set_values = {};
         this._deferred = from._deferred || false;
