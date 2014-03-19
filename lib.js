@@ -264,7 +264,7 @@ Q.makePromise.prototype.set = function(path, value) {
     var p = path.split('.'),
     f = p.pop(), self = this,
     o = this;
-    if(p)
+    if(p.length)
         o = o.get(p);
     return o.then(function (obj) {
         if(typeof obj.set === 'function')
