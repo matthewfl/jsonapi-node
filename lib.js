@@ -1,6 +1,7 @@
 var request = require("request");
 var Q = require('q');
 var url= require('url');
+var util = require('util');
 
 var version = require('./package.json').version;
 
@@ -64,12 +65,29 @@ function jsonapi(base_url, args) {
 
 module.exports = jsonapi;
 
+// errors
+
+function jsonapiError(human_readable, req) {
+    update_obj(this, Error.call(this));
+    Error.captureStackTrace(this, this.constructor);
+    this._raw = req;
+    this.message = human_readable;
+    if(req && req.errors && req.errors[0])
+        update_obj(this, req.errors[0]);
+}
+
+util.inherits(jsonapiError, Error);
+
+jsonapi.prototype.ERROR = jsonapiError;
+
+jsonapiError.prototype.toString = function () {
+    return JSON.stringify(this._raw, null, 4);
+};
+
 // methods
 
 
 jsonapi.prototype._req = function (path, method) {
-    if(!path || path.indexOf('undefined') != -1)
-        debugger;
     var self = this;
     if(typeof method == 'string')
         method = { 'method': method };
@@ -86,7 +104,7 @@ jsonapi.prototype._req = function (path, method) {
                 return ret.reject(err);
             }
             if(req.statusCode >= 400) {
-                var e = new Error('http error code: \n' + typeof body == 'string' ? body : JSON.stringify(body, null, 4));
+                var e = new jsonapiError('http error code: \n' + typeof body == 'string' ? body : JSON.stringify(body, null, 4), body);
                 return ret.reject(e);
             }
             if(req.statusCode == 204) { // no content
@@ -109,7 +127,7 @@ jsonapi.prototype.get = function(path, _list) {
     var self = this;
     return Q(path).then(function (path) {
         if(!path)
-            return Q.reject(new Error('Can not resolve undefined path'));
+            return Q.reject(new jsonapiError('Can not resolve undefined path'));
         if(_list !== true && self.cache[path])
             return Q(self._new_obj(self.cache[path]._type, self.cache[path]));
         self._manage_cache();
@@ -375,7 +393,7 @@ function make_obj(api, type) {
                     'get': function () {
                         if(this === obj.prototype) return true;
                         var link = self._api._getLink(this, name);
-                        if(!link) return Q.reject(new Error('could not find link for '+name+' from '+this._type));
+                        if(!link) return Q.reject(new jsonapiError('could not find link for '+name+' from '+this._type));
                         return this._api.get(link, !this._raw_obj.links[name]);
                     }
                 });
@@ -432,7 +450,7 @@ function make_obj(api, type) {
         'get': function () {
             if(this._api.cache[this._href])
                 return this._api.cache[this._href];
-            throw new Error('JSONAPI Object '+this._href+' not yet loaded, can not access the _raw_obj');
+            throw new jsonapiError('JSONAPI Object '+this._href+' not yet loaded, can not access the _raw_obj');
         }
     });
 
@@ -466,7 +484,7 @@ function make_obj(api, type) {
             if(self._api.cache[self._href][what])
                 return Q(self._api.cache[self._href][what]);
             var link = self._api._getLink(self, what);
-            if(!link) return Q.reject(new Error('could not compute link '+what+' for '+obj._type), null);
+            if(!link) return Q.reject(new jsonapiError('could not compute link '+what+' for '+obj._type), null);
             if(typeof _list == 'undefined')
                 _list = !self._raw_obj.links[what];
             return self._api.get(link, _list);
@@ -496,7 +514,7 @@ function make_obj(api, type) {
             }else{
                 link = self._api._getLink(self, what);
             }
-            if(!link) return Q.reject(new Error('could not find link for '+what+' from '+self._type), null);
+            if(!link) return Q.reject(new jsonapiError('could not find link for '+what+' from '+self._type), null);
             return self._api._req(link, { 'json': data, 'method': 'POST' }).then(function (json) {
                 var list = self._api._processResult(json);
                 return list[0];
@@ -695,7 +713,7 @@ page_obj.prototype.one = function () {
     var self = this;
     return this.length(function (length) {
         if(length !== 1)
-            return Q.reject(new Error('Page '+self._url+' does not have exactly one item, it has '+length));
+            return Q.reject(new jsonapiError('Page '+self._url+' does not have exactly one item, it has '+length));
         return self.get(0);
     });
 };
