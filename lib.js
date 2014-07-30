@@ -693,6 +693,7 @@ page_obj.prototype.filter = function (name_or_dict, value) {
         dict = name_or_dict;
     var query = url.parse(this._url, true);
     update_obj(query.query, dict);
+    query.search = null;
     return new page_obj(this._api, url.format(query));
 };
 
